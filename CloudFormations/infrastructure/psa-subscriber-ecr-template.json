@@ -1,0 +1,54 @@
+{
+    "Description": "The stack for creation of ecr repository",
+    "Parameters": {
+        "repositoryName": {
+            "Type": "String",
+            "Default": "com.niceincontact.partner-integration/psa-subscriber",
+            "AllowedValues" : ["com.niceincontact.partner-integration/psa-subscriber"]
+        }
+    },
+    
+    "Resources": {
+        "MyRepository": {
+            "Type": "AWS::ECR::Repository",
+            "Properties": {
+                "RepositoryName": {
+                "Ref": "repositoryName"
+              }
+            }
+          },
+        "LogGroup": {
+            "Type" : "AWS::Logs::LogGroup",
+            "Properties" : {
+                "LogGroupName" : "psa-subscriber-log-group",
+                "RetentionInDays" : 30
+            }
+        }
+    },
+    "Outputs": {
+        "EcrUri": {
+            "Value": {
+              "Fn::Join": ["", [
+                  {
+                    "Ref": "AWS::AccountId"
+                  },
+                  ".dkr.ecr.",
+                  {
+                      "Ref": "AWS::Region"
+                  },
+                  ".amazonaws.com/",
+                  {
+                      "Ref": "repositoryName"
+                  }
+                ]
+              ]
+            }
+          },
+        "CloudWatchLogGroupName": {
+            "Description": "The name of the CloudWatch log group",
+            "Value": {
+                "Ref": "LogGroup"
+            }
+        }
+	}   
+}

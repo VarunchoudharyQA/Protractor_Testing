@@ -1,0 +1,53 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "The stack for the psa subscriber ECS service definitions.",
+    "Parameters": {
+        "PsaSubscriberEnvironment": {
+            "Description": "Specifies the environment of the psa subscriber.",
+            "Default": "dev",
+            "Type": "String"
+        }       
+    },
+	"Outputs": {
+        "PSASubscriber": {
+            "Description": "The ARN of the deployed ECS service.",
+            "Value": {
+                "Ref": "PSASubscriber"
+            },
+			"Export" : { "Name" : "psa-subscriber-ecs-service" }
+        }
+    },
+    "Resources": {
+        "PSASubscriber": {
+            "Type": "AWS::ECS::Service",
+            "Properties": {
+                "Cluster": {
+                    "Fn::ImportValue"  : "psa-subscriber-ECSCluster"
+                },
+                "DeploymentConfiguration": {
+                    "MaximumPercent": 100,
+                    "MinimumHealthyPercent": 0
+                },
+                "DesiredCount": 1,
+                "LaunchType": "EC2",
+                "LoadBalancers": [
+                    {
+                        "ContainerName": {
+                            "Fn::Sub": "${PsaSubscriberEnvironment}-psa-subscriber-seed-container"
+                        },
+                        "ContainerPort": 9443,
+                        "TargetGroupArn": {
+                            "Fn::ImportValue"  : "psa-subscriber-target-group"
+                        }
+                    }
+                ],
+                "ServiceName": {
+                    "Fn::Sub": "${PsaSubscriberEnvironment}-psa-subscriber-service"
+                },
+                "TaskDefinition": {
+                    "Fn::ImportValue"  : "psa-subscriber-task-definition"
+                }
+            }
+        }
+    }
+}

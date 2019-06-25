@@ -1,0 +1,208 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "This CloudFormation template contains alarms for monitoring the Presence Sync Application service in AWS. All alarms are configured to send notifications into BMC Pulse using an SNS topic.",
+  "Parameters": {
+    "PsaSubscriberEnvironment": {
+      "Description": "Specifies the environment of the psa subscriber.",
+      "Default": "dev",
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "PSSEscalationTopic": {
+      "Type": "AWS::SNS::Topic"
+    },
+    "PSSEscalationTopicEmailSubscriber": {
+      "Type": "AWS::SNS::Subscription",
+      "Properties": {
+        "Endpoint": "inContact_Pune_OEM@nice.com",
+        "Protocol": "email",
+        "TopicArn":  {
+          "Ref": "PSSEscalationTopic"
+        }
+      }
+    },
+    "PSSAutoScalingGroupCpu": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "ActionsEnabled": true,
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "BMCMajorAlarmTopic"
+          },
+          {
+            "Ref": "PSSEscalationTopic"
+          }
+        ],
+        "AlarmName": {
+          "Fn::Sub": "${PsaSubscriberEnvironment}-PSS-AutoScalingGroup-Cpu"
+        },
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "Dimensions": [
+          {
+            "Name": "AutoScalingGroupName",
+            "Value": {
+              "Fn::ImportValue": "psa-subscriber-ECSAutoScalingGroup"
+            }
+          }
+        ],
+        "EvaluationPeriods": 12,
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "OKActions": [
+          {
+            "Fn::ImportValue": "BMCMajorAlarmTopic"
+          },
+          {
+            "Ref": "PSSEscalationTopic"
+          }
+        ],
+        "Period": 300,
+        "Statistic": "Maximum",
+        "Threshold": 100,
+        "TreatMissingData": "breaching"
+      }
+    },
+    "AlarmExceptionOnShutdown": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "ActionsEnabled": true,
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "BMCMajorAlarmTopic"
+          },
+          {
+            "Ref": "PSSEscalationTopic"
+          }
+        ],
+        "AlarmName": {
+          "Fn::Sub": "${PsaSubscriberEnvironment}-PSS-ExceptionOnShutdown"
+        },
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": 1,
+        "MetricName": "ExceptionOnShutdown",
+        "Namespace": "PresenceSyncSubscriberService",
+        "OKActions": [
+          {
+            "Fn::ImportValue": "BMCMajorAlarmTopic"
+          },
+          {
+            "Ref": "PSSEscalationTopic"
+          }
+        ],
+        "Period": 300,
+        "Statistic": "Sum",
+        "Threshold": 0,
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "MetricFilterExceptionOnShutdown": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "FilterPattern": "\"Stopping server\"",
+        "LogGroupName": "psa-subscriber-log-group",
+        "MetricTransformations": [
+          {
+            "MetricValue": "1",
+            "MetricNamespace": "PresenceSyncSubscriberService",
+            "MetricName": "ExceptionOnShutdown"
+          }
+        ]
+      }
+    },
+    "AlarmDataBaseException": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "ActionsEnabled": true,
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "BMCMajorAlarmTopic"
+          },
+          {
+            "Ref": "PSSEscalationTopic"
+          }
+        ],
+        "AlarmName": {
+          "Fn::Sub": "${PsaSubscriberEnvironment}-PSS-DataBaseException"
+        },
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": 1,
+        "MetricName": "ExceptionOnDatabaseEvolution",
+        "Namespace": "PresenceSyncSubscriberService",
+        "OKActions": [
+          {
+            "Fn::ImportValue": "BMCMajorAlarmTopic"
+          },
+          {
+            "Ref": "PSSEscalationTopic"
+          }
+        ],
+        "Period": 300,
+        "Statistic": "Sum",
+        "Threshold": 0,
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "MetricFilterDataBaseException": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "FilterPattern": "\"Database default is in an inconsistent state\"",
+        "LogGroupName": "psa-subscriber-log-group",
+        "MetricTransformations": [
+          {
+            "MetricValue": "1",
+            "MetricNamespace": "PresenceSyncSubscriberService",
+            "MetricName": "ExceptionOnDatabaseEvolution"
+          }
+        ]
+      }
+    },
+    "AlarmDatabaseDownException": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "ActionsEnabled": true,
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "BMCMajorAlarmTopic"
+          },
+          {
+            "Ref": "PSSEscalationTopic"
+          }
+        ],
+        "AlarmName": {
+          "Fn::Sub": "${PsaSubscriberEnvironment}-PSS-DatabaseDownException"
+        },
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": 1,
+        "MetricName": "ExceptionOnDatabaseShutdown",
+        "Namespace": "PresenceSyncSubscriberService",
+        "OKActions": [
+          {
+            "Fn::ImportValue": "BMCMajorAlarmTopic"
+          },
+          {
+            "Ref": "PSSEscalationTopic"
+          }
+        ],
+        "Period": 300,
+        "Statistic": "Sum",
+        "Threshold": 0,
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "MetricFilterDatabaseShutdownException": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "FilterPattern": "\"db - Connection is not available\"",
+        "LogGroupName": "psa-subscriber-log-group",
+        "MetricTransformations": [
+          {
+            "MetricValue": "1",
+            "MetricNamespace": "PresenceSyncSubscriberService",
+            "MetricName": "ExceptionOnDatabaseShutdown"
+          }
+        ]
+      }
+    }
+  }
+}

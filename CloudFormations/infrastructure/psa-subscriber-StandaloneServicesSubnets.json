@@ -1,0 +1,452 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "AWS CloudFormation Template for Standalone Services Network Only",
+  "Parameters": {
+    "AZ1PublicSubnet": {
+      "Description": "Public subnet for AZ1",
+      "Type": "String",
+      "Default": "10.0.4.0/27"
+    },
+    "AZ2PublicSubnet": {
+      "Description": "Public subnet for AZ2",
+      "Type": "String",
+      "Default": "10.0.4.32/27"
+    },
+    "AZ1PrivateSubnet": {
+      "Description": "Private subnet for AZ1",
+      "Type": "String",
+      "Default": "10.0.4.64/27"
+    },
+    "AZ2PrivateSubnet": {
+      "Description": "Private subnet for AZ2",
+      "Type": "String",
+      "Default": "10.0.4.96/27"
+    },
+    "Owner": {
+      "Description": "Owner",
+      "Type": "String",
+      "Default": "Network Teams"
+    },
+    "ServiceName": {
+      "Description": "Simple Name for Service (IE Telemetry, PubSub, SMS, FindMatch, etc)",
+      "Type": "String",
+      "Default": "psa-subscriber"
+    },
+    "AvailabilityZone1": {
+      "Description": "Name of an Availability Zone in this Region",
+      "Type": "AWS::EC2::AvailabilityZone::Name"
+    },
+    "AvailabilityZone2": {
+      "Description": "Name of an Availability Zone in this Region",
+      "Type": "AWS::EC2::AvailabilityZone::Name"
+    },
+    "NGWorIGW": {
+      "Description": "Will your route table need NAT or IGW for the gateway",
+      "Type": "String",
+      "AllowedValues": [
+        "NGW",
+        "IGW"
+      ]
+    }
+  },
+  "Conditions": {
+    "NatGateway": {
+      "Fn::Equals": [
+        {
+          "Ref": "NGWorIGW"
+        },
+        "NGW"
+      ]
+    },
+    "InternetGateway": {
+      "Fn::Equals": [
+        {
+          "Ref": "NGWorIGW"
+        },
+        "IGW"
+      ]
+    }
+  },
+  "Resources": {
+    "ServiceRouteTable": {
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "ServiceName"
+                  },
+                  " Route Table"
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Fn::ImportValue": "StandaloneServices-Vpc"
+        }
+      },
+      "Type": "AWS::EC2::RouteTable"
+    },
+    "ServiceNGWDefaultRoute": {
+      "Condition": "NatGateway",
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "NatGatewayId": {
+          "Fn::ImportValue": "StandaloneServices-Az1NATGateway"
+        },
+        "RouteTableId": {
+          "Ref": "ServiceRouteTable"
+        }
+      },
+      "Type": "AWS::EC2::Route"
+    },
+    "ServiceIGWDefaultRoute": {
+      "Condition": "InternetGateway",
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Fn::ImportValue": "StandaloneServices-BaseIGW"
+        },
+        "RouteTableId": {
+          "Ref": "ServiceRouteTable"
+        }
+      },
+      "Type": "AWS::EC2::Route"
+    },
+    "PersistenceRouteTable": {
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "ServiceName"
+                  },
+                  "Private Route Table"
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Fn::ImportValue": "StandaloneServices-Vpc"
+        }
+      },
+      "Type": "AWS::EC2::RouteTable"
+    },
+    "Az1PublicServiceSubnet": {
+      "Properties": {
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZone1"
+        },
+        "CidrBlock": {
+          "Ref": "AZ1PublicSubnet"
+        },
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "Az1",
+                  " ",
+                  "Public",
+                  " ",
+                  {
+                    "Ref": "ServiceName"
+                  }
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Fn::ImportValue": "StandaloneServices-Vpc"
+        }
+      },
+      "Type": "AWS::EC2::Subnet"
+    },
+    "Az1NATGWSubnetRouteTableAssociation": {
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "ServiceRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "Az1PublicServiceSubnet"
+        }
+      },
+      "Type": "AWS::EC2::SubnetRouteTableAssociation"
+    },
+    "Az1PrivateServiceSubnet": {
+      "Properties": {
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZone1"
+        },
+        "CidrBlock": {
+          "Ref": "AZ1PrivateSubnet"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "Az1",
+                  " ",
+                  "Private",
+                  " ",
+                  {
+                    "Ref": "ServiceName"
+                  }
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Fn::ImportValue": "StandaloneServices-Vpc"
+        }
+      },
+      "Type": "AWS::EC2::Subnet"
+    },
+    "Az1PrivateSubnetRouteTableAssociation": {
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PersistenceRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "Az1PrivateServiceSubnet"
+        }
+      },
+      "Type": "AWS::EC2::SubnetRouteTableAssociation"
+    },
+    "Az2PublicServiceSubnet": {
+      "Properties": {
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZone2"
+        },
+        "CidrBlock": {
+          "Ref": "AZ2PublicSubnet"
+        },
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "Az2",
+                  " ",
+                  "Public",
+                  " ",
+                  {
+                    "Ref": "ServiceName"
+                  }
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Fn::ImportValue": "StandaloneServices-Vpc"
+        }
+      },
+      "Type": "AWS::EC2::Subnet"
+    },
+    "Az2NATGWSubnetRouteTableAssociation": {
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "ServiceRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "Az2PublicServiceSubnet"
+        }
+      },
+      "Type": "AWS::EC2::SubnetRouteTableAssociation"
+    },    
+    "Az2PrivateServiceSubnet": {
+      "Properties": {
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZone2"
+        },
+        "CidrBlock": {
+          "Ref": "AZ2PrivateSubnet"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "Az2",
+                  " ",
+                  "Private",
+                  " ",
+                  {
+                    "Ref": "ServiceName"
+                  }
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Fn::ImportValue": "StandaloneServices-Vpc"
+        }
+      },
+      "Type": "AWS::EC2::Subnet"
+    },
+    "Az2PrivateSubnetRouteTableAssociation": {
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PersistenceRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "Az2PrivateServiceSubnet"
+        }
+      },
+      "Type": "AWS::EC2::SubnetRouteTableAssociation"
+    }
+  },
+  "Outputs": {
+    "ServiceRouteTable": {
+      "Description": "Service Route Table",
+      "Value": {
+        "Ref": "ServiceRouteTable"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "StandaloneServices",
+              "-",
+              {
+                "Ref": "ServiceName"
+              },
+              "RouteTable"
+            ]
+          ]
+        }
+      }
+    },
+    "PersistenceRouteTable": {
+      "Description": "Route Table for Private Subnets",
+      "Value": {
+        "Ref": "PersistenceRouteTable"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "StandaloneServices",
+              "-",
+              {
+                "Ref": "ServiceName"
+              },
+              "PrivateRouteTable"
+            ]
+          ]
+        }
+      }
+    },
+    "Az1PublicServiceSubnet": {
+      "Description": "Az1 Subnet",
+      "Value": {
+        "Ref": "Az1PublicServiceSubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "StandaloneServices",
+              "-",
+              {
+                "Ref": "ServiceName"
+              },
+              "PublicAz1Subnet"
+            ]
+          ]
+        }
+      }
+    },
+    "Az2PublicServiceSubnet": {
+      "Description": "Az2 Subnet",
+      "Value": {
+        "Ref": "Az2PublicServiceSubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "StandaloneServices",
+              "-",
+              {
+                "Ref": "ServiceName"
+              },
+              "PublicAz2Subnet"
+            ]
+          ]
+        }
+      }
+    },
+    "Az1PrivateServiceSubnet": {
+      "Description": "Az1 Subnet",
+      "Value": {
+        "Ref": "Az1PrivateServiceSubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "StandaloneServices",
+              "-",
+              {
+                "Ref": "ServiceName"
+              },
+              "PrivateAz1Subnet"
+            ]
+          ]
+        }
+      }
+    },
+    "Az2PrivateServiceSubnet": {
+      "Description": "Az2 Subnet",
+      "Value": {
+        "Ref": "Az2PrivateServiceSubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "StandaloneServices",
+              "-",
+              {
+                "Ref": "ServiceName"
+              },
+              "PrivateAz2Subnet"
+            ]
+          ]
+        }
+      }
+    }
+  }
+}

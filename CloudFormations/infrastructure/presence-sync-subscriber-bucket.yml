@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Stack for Presence-Sync-Subscriber Bucket
+Parameters:
+  Environment:
+    Description: Environment Name
+    Type: String
+  S3BucketName:
+    Type: String
+    Description: S3 bucket to private & public keys of Presence-Sync-Subscriber
+  CreateS3Bucket:
+    Type: String
+    Description: Specify if we need to create mentioned S3 bucket
+    Default: true
+    AllowedValues:
+      - true
+      - false
+Conditions:
+  CreateS3Bucket: !Equals [ !Ref CreateS3Bucket, true ]
+
+Resources:
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Condition: CreateS3Bucket
+    Properties:
+      AccessControl: PublicReadWrite
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+      Tags:
+        - Key: "incontact:resource-name"
+          Value: !Join ["_", [Ref: "AWS::StackName", !Join ["-", [Ref: S3BucketName, Ref: Environment]]]]
+        - Key: "incontact:owner"
+          Value: "partner_integration_team"
+        - Key: "Owner"
+          Value: "partner_integration_team"
+        - Key: "Cluster"
+          Value: "Global"
+        - Key: "Product"
+          Value: "Presence-Sync-Subscriber"
+        - Key: "DeviceType"
+          Value: "S3 bucket"
+        - Key: "Name"
+          Value: "psa-subscriber-Bucket"
+      BucketName: !Join
+        - '-'
+        - - !Ref S3BucketName
+          - !Ref Environment
+
+  S3BucketPolicy: 
+      Type: AWS::S3::BucketPolicy
+      Properties: 
+        Bucket: !Join
+          - '-'
+          - - !Ref S3BucketName
+            - !Ref Environment
+        PolicyDocument: 
+          Statement: 
+            - Effect: Allow
+              Action: 's3:GetObject'
+              Resource:
+                - !Join 
+                  - ''
+                  - - 'arn:aws:s3:::psa-subscriber-'
+                    - !Ref Environment
+                    - '/*'
+              Principal: '*'
+
+Outputs:
+  S3BucketName:
+    Description: Presence-Sync-Subscriber-Bucket
+    Value: !If [CreateS3Bucket, !Ref S3Bucket, !Ref S3BucketName]

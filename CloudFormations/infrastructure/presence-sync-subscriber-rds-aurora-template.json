@@ -1,0 +1,360 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "The stack for creation of presence sync subscriber RDS Aurora-serverless",
+
+  "Mappings": {
+
+    "EngineMap": {
+      "aurora": {
+        "EngineVersion": "5.6.10a",
+        "Port": 3306,
+        "ClusterParameterGroupFamily": "aurora5.6",
+        "ParameterGroupFamily": "aurora5.6"
+      },
+      "aurora-mysql": {
+        "EngineVersion": "5.7.12",
+        "Port": 3306,
+        "ClusterParameterGroupFamily": "aurora-mysql5.7",
+        "ParameterGroupFamily": "aurora-mysql5.7"
+      }
+    }
+  },
+
+
+  "Parameters": {
+
+    "PresenceSyncSubscriberEnvironment": {
+      "Description": "Specifies the environment of the presence sync subscriber.",
+      "Default": "dev",
+      "Type": "String"
+    },
+
+    "DBBackupRetentionPeriod": {
+      "Description": "The number of days to keep snapshots of the cluster",
+      "Type": "Number",
+      "MinValue": "1",
+      "MaxValue": "35",
+      "Default" : "30"
+    },
+
+    "Engine": {
+      "Description": "The name of the database engine that you want to use for this DB cluster.",
+      "Type": "String",
+      "Default": "aurora",
+      "AllowedValues": [
+        "aurora",
+        "aurora-mysql"
+      ]
+    },
+
+    "EngineMode": {
+      "Description": "The name of the engine mode that you want to use for this DB cluster.",
+      "Type": "String",
+      "Default": "serverless",
+      "AllowedValues": [
+        "serverless",
+        "provisioned"
+      ]
+    },
+
+    "DBDeletionProtection": {
+      "Description": "The deletion protection for this db cluster.",
+      "Type": "String",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Default" : "true"
+    },
+
+    "RDSDbDatabaseName": {
+      "Description": "Database Name",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "16",
+      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9_-]*",
+      "ConstraintDescription": "must begin with a letter and must be between 1 to 16 alphanumeric characters."
+    },
+
+    "RDSDbClusterIdentifier": {
+      "Description": "DB cluster identifier",
+      "Type": "String",
+      "MinLength": "5",
+      "MaxLength": "15",
+      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription": "must begin with a letter and contain only alphanumeric characters."
+    },
+
+    "PreferredBackupWindow": {
+      "Description": "The daily time range in UTC during which you want to create automated backups.",
+      "Type": "String",
+      "Default": "19:50-20:20"
+    },
+
+    "PreferredMaintenanceWindow": {
+      "Description": "The weekly time range (in UTC) during which system maintenance can occur.",
+      "Type": "String",
+      "Default": "sat:10:19-sat:10:49"
+    },
+
+    "DbMasterUsername": {
+      "Description": "Db Username",
+      "Type": "String",
+      "MinLength": "5",
+      "MaxLength": "15",
+      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription": "must begin with a letter and contain only alphanumeric characters."
+    },
+    "DbMasterPassword": {
+      "Description": "Db Password",
+      "NoEcho": "true",
+      "Type": "String",
+      "MinLength": "8",
+      "MaxLength": "41",
+      "AllowedPattern": "[a-zA-Z0-9]*",
+      "ConstraintDescription": "App Db Password must be 8-41 characters and contain only alpha numeric characters."
+    }
+  },
+
+
+  "Outputs": {
+    "ClusterName": {
+      "Description": "The name of the cluster.",
+      "Value": { "Ref" : "RDSCluster" },
+      "Export": {
+        "Name": { "Fn::Sub": "${AWS::StackName}-ClusterName" }
+      }
+    },
+
+    "JDBCConnectionString": {
+      "Description" : "JDBC connection string for database",
+      "Value" : { "Fn::Join": [ "", [ "jdbc:mysql://",
+        { "Fn::GetAtt": [ "RDSCluster", "Endpoint.Address" ] },
+        ":",
+        { "Fn::GetAtt": [ "RDSCluster", "Endpoint.Port" ] },
+        "/",
+        { "Ref": "RDSDbDatabaseName" }]]},
+      "Export" : { "Name" : "psa-db-connection-string" }
+    },
+
+    "PSADBSecurityGroup": {
+      "Description": "The ID of the DB Security Group",
+      "Value": {
+        "Ref": "PSADBSecurityGroup"
+      },
+      "Export" : { "Name" : "psa-db-security-group" }
+    }
+
+  },
+
+
+  "Resources" : {
+
+    "DBSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupDescription": "PSA DB subnet groups",
+
+        "SubnetIds": [
+          {
+            "Fn::ImportValue"  : "StandaloneServices-psa-subscriberPrivateAz1Subnet"
+          },
+          {
+            "Fn::ImportValue"  : "StandaloneServices-psa-subscriberPrivateAz2Subnet"
+          }
+        ],
+
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "PROJECT_NAME-",
+                  {
+                    "Ref": "PresenceSyncSubscriberEnvironment"
+                  },
+                  "-db"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+
+    "PSADBSecurityGroup" : {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {"Fn::ImportValue"  : "StandaloneServices-Vpc"},
+        "GroupName": "PSADBSecurityGroup",
+        "GroupDescription": "Security group for RDS Cluster",
+        "SecurityGroupEgress" : [{
+
+          "IpProtocol" : "-1",
+
+          "CidrIp" : "0.0.0.0/0"
+
+        }],
+
+        "Tags": [
+
+          {
+
+            "Key": "Name",
+
+            "Value": {
+
+              "Fn::Join": [
+
+                ":",
+
+                [
+
+                  {
+
+                    "Ref": "AWS::StackName"
+
+                  },
+
+                  "PSADbSecurityGroup"
+
+                ]
+
+              ]
+
+            }
+
+          },
+          {
+            "Key": "Cluster",
+            "Value": "Global"
+          },
+          {
+            "Key": "DeviceType",
+            "Value": "RDSSecurityGroup"
+          },
+          {
+            "Key": "Owner",
+            "Value": "Partner Integration Team"
+          },
+          {
+            "Key": "Product",
+            "Value": "PSA Subscriber"
+          },
+          {
+            "Key": "incontact:owner",
+            "Value": "Partner Integration Team"
+          },
+          {
+            "Key": "incontact:resource-name",
+            "Value": {
+              "Fn::Join": [
+                "_",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "PSADbSecurityGroup"
+                ]
+              ]
+            }
+          }
+
+        ]
+
+      }
+    },
+
+
+    "RDSCluster" : {
+      "Type" : "AWS::RDS::DBCluster",
+      "Properties" : {
+        "BackupRetentionPeriod" : { "Ref" : "DBBackupRetentionPeriod" },
+        "DatabaseName" : { "Ref" : "RDSDbDatabaseName" },
+        "DBClusterIdentifier" : { "Ref" : "RDSDbClusterIdentifier" },
+        "DBClusterParameterGroupName" : { "Ref" : "RDSDBClusterParameterGroup" },
+        "DBSubnetGroupName" : { "Ref" : "DBSubnetGroup" },
+        "DeletionProtection" : { "Ref" : "DBDeletionProtection" },
+        "Engine" : { "Ref" : "Engine" },
+        "EngineMode" : { "Ref" : "EngineMode" },
+        "EngineVersion" : { "Fn::FindInMap" : [ "EngineMap", { "Ref" : "Engine" }, "EngineVersion"] },
+        "MasterUsername" : { "Ref" : "DbMasterUsername" },
+        "MasterUserPassword" : { "Ref" : "DbMasterPassword" },
+        "Port" : { "Fn::FindInMap" : [ "EngineMap", { "Ref" : "Engine" }, "Port"] },
+        "PreferredBackupWindow" : { "Ref" : "PreferredBackupWindow" },
+        "PreferredMaintenanceWindow" : { "Ref" : "PreferredMaintenanceWindow" },
+        "VpcSecurityGroupIds" : [{"Ref" : "PSADBSecurityGroup"}],
+        "ScalingConfiguration" : {
+          "AutoPause" : false,
+          "MaxCapacity" : 16,
+          "MinCapacity" : 2,
+          "SecondsUntilAutoPause" : 600
+        },
+
+        "Tags": [
+
+          {
+
+            "Key": "Name",
+
+            "Value": "Presence Sync RDS"
+
+          },
+          {
+            "Key": "Cluster",
+            "Value": "Global"
+
+          },
+          {
+            "Key": "DeviceType",
+            "Value": "RDSCluster"
+
+          },
+          {
+            "Key": "Owner",
+            "Value": "Partner Integration Team"
+
+          },
+          {
+            "Key": "Product",
+            "Value": "PSA-Subscriber"
+
+          },
+          {
+            "Key": "incontact:owner",
+            "Value": "Partner Integration Team"
+
+          },
+          {
+            "Key": "incontact:resource-name",
+            "Value": {
+              "Fn::Join": [
+                "_",
+                [
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "RDSCluster"
+                ]
+              ]
+            }
+          }
+
+        ]
+      }
+    },
+
+    "RDSDBClusterParameterGroup" : {
+      "Type": "AWS::RDS::DBClusterParameterGroup",
+      "Properties" : {
+        "Description" : "Aurora Cluster Parameter Group",
+        "Family" : "aurora5.6",
+        "Parameters" : {
+          "time_zone" : "US/Eastern"
+        }
+      }
+    }
+  }
+}

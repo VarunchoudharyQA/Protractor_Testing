@@ -1,0 +1,149 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "The stack for the load balancer of the psa subscriber.",
+    "Parameters": {
+        "PsaSubscriberEnvironment": {
+            "Description": "Specifies the environment of the psa subscriber.",
+            "Default": "dev",
+            "Type": "String"
+        }
+    },
+    "Outputs": {
+        "PSASubscriberLoadBalancerURL": {
+            "Description": "The psa subscriber load balancer URL.",
+            "Value": {
+                "Fn::GetAtt": [
+                    "PSASubscriberLoadBalancer",
+                    "DNSName"
+                ]
+            }
+        },
+        "PSASubscriberTargetGroupARN": {
+            "Description": "The ARN of the target group associated with the load balancer.",
+            "Value": {
+                "Ref": "PSASubscriberTargetGroup"
+            },
+			"Export" : { "Name" : "psa-subscriber-target-group" }
+        }
+    },
+    "Resources": {
+        "PSASubscriberLoadBalancer": {
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            "Properties": {
+                "Name": {
+                    "Fn::Sub": "${PsaSubscriberEnvironment}-psa-subscriber-LB"
+                },                
+                "Subnets": [
+                    {
+                        "Fn::ImportValue"  : "StandaloneServices-psa-subscriberPublicAz1Subnet"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "incontact:resource-name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-psa-subscriber-LoadBalancer"
+                        }
+                    },
+                    {
+                        "Key": "incontact:owner",
+                        "Value": "Partner Integration Team"
+                    },
+					{
+						"Key": "Cluster",
+						"Value": "Global"
+					},
+					{
+						"Key": "DeviceType",
+						"Value": "LoadBalancer Component"
+					},
+					{
+						"Key": "Name",
+						"Value": "PSA-Subscriber-LoadBalancer"
+					},
+					{
+						"Key": "Owner",
+						"Value": "Partner Integration Team"
+					},
+					{
+						"Key": "Product",
+						"Value": "PSA Subscriber"
+					}
+                ],
+				"Type": "network",
+                "IpAddressType": "ipv4"
+            }
+            
+        },
+        "PSASubscriberTargetGroup": {
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+            "Properties": {
+                "HealthCheckIntervalSeconds": 30,
+                "HealthCheckPort": 443,
+                "HealthCheckProtocol": "TCP",
+                "HealthyThresholdCount": 3,
+                "Name": {
+                    "Fn::Sub": "${PsaSubscriberEnvironment}-psa-subscriber-https-TG"
+                },
+                "Port": 443,
+                "Protocol": "TCP",
+                "Tags": [
+                    {
+                        "Key": "incontact:resource-name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-psa-subscriber-TargetGroup"
+                        }
+                    },
+                    {
+                        "Key": "incontact:owner",
+                        "Value": "Partner Integration Team"
+                    },
+                    {
+                        "Key": "Cluster",
+                        "Value": "Global"
+                    },
+                    {
+                        "Key": "DeviceType",
+                        "Value": "TargetGroup Component"
+                    },
+                    {
+                        "Key": "Name",
+                        "Value": "PSA-Subscriber-TargetGroup"
+                    },
+                    {
+                        "Key": "Owner",
+                        "Value": "Partner Integration Team"
+                    },
+                    {
+                        "Key": "Product",
+                        "Value": "PSA Subscriber"
+                    }
+                ],
+                "UnhealthyThresholdCount": 3,
+                "VpcId": {
+                    "Fn::ImportValue"  : "StandaloneServices-Vpc"
+                }
+            },
+            "DependsOn": "PSASubscriberLoadBalancer"
+        },
+        "PSASubscriberLoadBalancerListener": {
+            "Type": "AWS::ElasticLoadBalancingV2::Listener",
+            "Properties": {
+                "DefaultActions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "PSASubscriberTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "LoadBalancerArn": {
+                    "Ref": "PSASubscriberLoadBalancer"
+                },
+                "Port":443,
+                "Protocol": "TCP"
+        },
+        "DependsOn": "PSASubscriberTargetGroup"
+      }
+    }
+}

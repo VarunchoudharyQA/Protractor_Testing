@@ -1,0 +1,221 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "The stack for the ECS task definition used to deploy the psa subscriber.",
+    "Parameters": {
+        "PsaSubscriberEnvironment": {
+            "Description": "Specifies the environment of the psa subscriber.",
+            "Default": "dev",
+            "Type": "String"
+        },
+        "ImageURL": {
+            "Description": "Specifies the URL of the ECR image to be deployed.",
+            "Type": "String"
+        },
+        "TaskContainerMemory": {
+            "Description": "Specifies the memory size for container.",
+            "Default": 4096,
+            "Type": "Number"
+        },
+        "Region": {
+            "Description": "Specifies the region where psa-subscriber is being deployed.",
+            "Type": "String"
+        },
+        "ApplicationSecret": {
+            "Description": "Specifies the application secret to start the play application.",
+            "Type": "String"
+        },
+        "PSADBUserName": {
+            "Description": "Specifies the username to access the database.",
+            "Type": "String"
+        },
+        "PSADBPassword": {
+            "Description": "Specifies the password to access the database.",
+            "NoEcho": "true",
+            "Type": "String"
+        },
+        "CloudwatchLogsGroup": {
+            "Description": "Specifies the name of the cloudwatch log group.",
+			"Default": "psa-subscriber-log-group",
+            "Type": "String"
+        },
+        "PSAACDApiSecret": {
+            "Description": "Specifies the ACD Api Secret",
+            "NoEcho": "true",
+            "Type": "String"
+        },
+        "ACDBaseUrl": {
+            "Description": "Specifies the ACD Base URL",
+            "Type": "String"
+        }
+
+    },
+    "Outputs": {
+        "PSASubscriberDeployTask": {
+            "Description": "The ARN of the first deploy ECS task.",
+            "Value": {
+                "Ref": "PSASubscriberDeployTask"
+            },
+			"Export" : { "Name" : "psa-subscriber-task-definition" }
+        }
+    },
+    "Resources": {
+        "PSASubscriberTaskRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Sid": "",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "ecs-tasks.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Sid": "VisualEditor3",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "s3:GetObject",
+                                        "s3:GetBucketLocation",
+                                        "s3:ListBucket",
+                                        "s3:PutObject"
+                                    ],
+                                    "Resource": [
+                                        "arn:aws:s3:::psa-subscriber-bucket*",
+                                        "arn:aws:s3:::psa-subscriber-bucket*/*"
+                                    ]
+                                },
+                                {
+                                    "Sid": "VisualEditor4",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "s3:ListAllMyBuckets"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Sid": "VisualEditor5",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "cloudwatch:PutMetricData"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Sid": "VisualEditor6",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:*"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        },
+                        "PolicyName": {
+                            "Fn::Sub": "${PsaSubscriberEnvironment}-psa-subscriber-task-policy"
+                        }
+                    }
+                ],
+                "RoleName": {
+                    "Fn::Sub": "${PsaSubscriberEnvironment}-psa-subscriber-task-role"
+                }
+            }
+        },
+        "PSASubscriberDeployTask": {
+            "Type": "AWS::ECS::TaskDefinition",
+            "Properties": {
+                "Family": {
+                    "Fn::Sub": "${PsaSubscriberEnvironment}-psa-subscriber-deploy-task"
+                },
+                "NetworkMode": "bridge",
+                "TaskRoleArn": {
+                    "Ref": "PSASubscriberTaskRole"
+                },
+                "ContainerDefinitions": [
+                    {
+                        "Environment": [
+                            {
+                                "Name": "APPLICATION_SECRET",
+                                "Value": {
+                                    "Ref": "ApplicationSecret"
+                                }
+                            },
+                            {
+                                "Name": "DBENDPOINT",
+                                "Value": {
+                                    "Fn::ImportValue"  : "psa-db-connection-string"
+                                }
+                            },
+                            {
+                                "Name": "DBUSER",
+                                "Value": {
+                                    "Ref": "PSADBUserName"
+                                }
+                            },
+                            {
+                                "Name": "DBPASSWORD",
+                                "Value": {
+                                    "Ref": "PSADBPassword"
+                                }
+                            },
+                            {
+                                "Name": "ACDApi_Secret",
+                                "Value": {
+                                    "Ref": "PSAACDApiSecret"
+                                }
+                            },
+                            {
+                                "Name": "ACDAuthBase_url",
+                                "Value": {
+                                    "Ref": "ACDBaseUrl"
+                                }
+                            }
+                        ],
+                        "Essential": true,
+                        "Image": {
+                            "Ref": "ImageURL"
+                        },
+                        "Memory": {
+                            "Ref": "TaskContainerMemory"
+                        },
+                        "LogConfiguration": {
+                            "LogDriver": "awslogs",
+                            "Options":{
+                                "awslogs-group":{
+                                    "Ref":"CloudwatchLogsGroup"
+                                },
+                                "awslogs-region":{
+                                    "Ref": "Region"
+                                },
+                                "awslogs-stream-prefix": {
+                                    "Fn::Sub": "${PsaSubscriberEnvironment}-psa-subscriber-deploy-task"
+                                }
+                            }
+                        },
+                        "Name": {
+                            "Fn::Sub": "${PsaSubscriberEnvironment}-psa-subscriber-seed-container"
+                        },
+                        "PortMappings": [
+                            {
+                                "HostPort": 443,
+                                "Protocol": "tcp",
+                                "ContainerPort": 9443
+                            }
+                        ]
+
+                    }
+                ]
+            },
+            "DependsOn": "PSASubscriberTaskRole"
+        }
+    }
+}

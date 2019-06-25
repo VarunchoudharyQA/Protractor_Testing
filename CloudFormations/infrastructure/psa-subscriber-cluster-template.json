@@ -1,0 +1,759 @@
+{
+
+    "AWSTemplateFormatVersion": "2010-09-09",
+
+    "Description": "The stack for creation of ECS cluster for deploying psa subscriber",
+
+    "Mappings": {    
+
+        "AWSRegionToAMI" : {
+
+            "us-east-2": {
+
+                "AMI": "ami-028a9de0a7e353ed9"
+
+            },
+
+            "us-east-1": {
+
+                "AMI": "ami-00129b193dc81bc31"
+
+            },
+
+            "us-west-2": {
+
+                "AMI": "ami-01b70aea4161476b7"
+
+            },
+
+            "us-west-1": {
+
+                "AMI": "ami-0d438d09af26c9583"
+
+            },
+
+            "eu-west-3": {
+
+                "AMI": "ami-07da674f0655ef4e1"
+
+            },
+
+            "eu-west-2": {
+
+                "AMI": "ami-a44db8c3"
+
+            },
+
+            "eu-west-1": {
+
+                "AMI": "ami-0af844a965e5738db"
+
+            },
+
+            "eu-central-1": {
+
+                "AMI": "ami-0eaa3baf6969912ba"
+
+            },
+
+            "ap-south-1": {
+
+                "AMI": "ami-0c179ca015d301829"
+
+            },
+
+            "ap-southeast-2": {
+
+                "AMI": "ami-02c73ee1100ce3e7a"
+
+            }
+
+        }
+
+    },    
+
+    "Parameters": {
+
+		"PsaSubscriberCluster": {
+
+			"Description": "Specifies the cluster of the psa subscriber",
+
+			"Default": "psa-subscriber-cluster",
+
+			"Type": "String"
+
+        },
+		
+		"Ec2KeyPairName": {
+			"Description": "name of ec2 key pair to be used",
+			"Type": "String"
+		}
+
+    },
+
+    
+
+    "Resources": {
+
+
+        "ECSHostSecurityGroup": {
+
+            "Type": "AWS::EC2::SecurityGroup",
+
+            "Properties": {
+
+              "VpcId": {"Fn::ImportValue"  : "StandaloneServices-Vpc"},
+
+              "GroupDescription": "Access to the ECS hosts and the tasks/containers that run on them",
+
+              "SecurityGroupIngress" : [{
+
+                "IpProtocol" : "TCP",
+
+                "FromPort" : "22",
+
+                "ToPort" : "22",
+
+                "CidrIp" : "0.0.0.0/0"
+
+            },
+            {
+
+                "IpProtocol" : "TCP",
+
+                "FromPort" : "443",
+
+                "ToPort" : "443",
+
+                "CidrIp" : "0.0.0.0/0"
+
+            }],
+
+              "SecurityGroupEgress" : [{
+
+                "IpProtocol" : "-1",
+
+                "CidrIp" : "0.0.0.0/0"
+
+               }],
+
+               "Tags": [
+
+                    {
+
+                      "Key": "Name",
+
+                      "Value": {
+
+                        "Fn::Join": [
+
+                          ":",
+
+                          [
+
+                            {
+
+                              "Ref": "AWS::StackName"
+
+                            },
+
+                            "ECSHostSecurityGroup"
+
+                          ]
+
+                        ]
+
+                      }
+
+                    },
+                    {
+                        "Key": "Cluster",
+                        "Value": "Global"
+                    },
+                    {
+                        "Key": "DeviceType",
+                        "Value": "Ec2SecurityGroup"
+                    },
+                    {
+                        "Key": "Owner",
+                        "Value": "Partner Integration Team"
+                    },
+                    {
+                        "Key": "Product",
+                        "Value": "PSA Subscriber"
+                    },
+                    {
+                        "Key": "incontact:owner",
+                        "Value": "Partner Integration Team"
+                    },
+                    {
+                        "Key": "incontact:resource-name",
+                        "Value": {
+                          "Fn::Join": [
+                            "_",
+                            [
+                              {
+                                "Ref": "AWS::StackName"
+                              },
+                              "ECSHostSecurityGroup"
+                            ]
+                          ]
+                        }
+                    }
+
+                ]
+
+            }
+
+          },
+        "SecurityGroupAuroraIngress": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties" : {
+            "GroupId": {"Fn::ImportValue"  : "psa-db-security-group"},
+            "IpProtocol": "TCP",
+            "FromPort": "3306",
+            "ToPort": "3306",
+            "SourceSecurityGroupId": { "Fn::GetAtt": [ "ECSHostSecurityGroup", "GroupId" ] }
+            },
+          "DependsOn": "ECSHostSecurityGroup"
+          },
+          "ECSCluster": {
+
+                "Type": "AWS::ECS::Cluster",
+
+                "Properties": {
+
+                    "ClusterName": {  
+
+                        "Fn::Join":[  
+
+                           "-",
+
+                           [
+
+                              {
+
+                                 "Ref":"PsaSubscriberCluster"
+
+                              },
+
+                              "ECSCluster"
+
+                           ]
+
+                        ]
+
+                    }
+
+                }
+
+            },
+
+            "ECSAutoScalingGroup": {
+
+                "Type": "AWS::AutoScaling::AutoScalingGroup",
+
+                "Properties": {
+
+                    "VPCZoneIdentifier": [ 
+
+                        {"Fn::ImportValue"  : "StandaloneServices-psa-subscriberPublicAz1Subnet"}
+
+                    ],
+
+                    "LaunchConfigurationName": {
+
+                        "Ref": "ECSLaunchConfiguration"
+
+                    },
+
+                    "MinSize": "1",
+
+                    "MaxSize": "1",
+
+                    "DesiredCapacity": "1",
+
+                    "Tags": [
+
+                        {
+
+                            "Key": "Name",
+
+                            "Value": {"Fn::Sub": "${PsaSubscriberCluster}-AutoscalingGroup"},
+
+                            "PropagateAtLaunch": true
+
+                        },
+                    {
+                        "Key": "Cluster",
+                        "Value": "Global",
+                        "PropagateAtLaunch": "true"
+                    },
+                    {
+                        "Key": "DeviceType",
+                        "Value": "AutoScalingGroup",
+                        "PropagateAtLaunch": "true"
+                    },
+                    {
+                        "Key": "Owner",
+                        "Value": "Partner Integration Team",
+                        "PropagateAtLaunch": "true"
+                    },
+                    {
+                        "Key": "Product",
+                        "Value": "PSA Subscriber",
+                        "PropagateAtLaunch": "true"
+                    },
+                    {
+                        "Key": "incontact:owner",
+                        "Value": "Partner Integration Team",
+                        "PropagateAtLaunch": "true"
+                    },
+                    {
+                        "Key": "incontact:resource-name",
+                        "Value": {
+                          "Fn::Join": [
+                            "_",
+                            [
+                              {
+                                "Ref": "AWS::StackName"
+                              },
+                              "ECSAutoScalingGroup"
+                            ]
+                          ]
+                        },
+                        "PropagateAtLaunch": "true"
+                    }
+
+                    ]
+
+                },
+
+                "CreationPolicy": {
+
+                    "ResourceSignal": {
+
+                        "Timeout": "PT10M"
+
+                    }
+
+                },
+
+                "UpdatePolicy": {
+
+                    "AutoScalingRollingUpdate": {
+
+                        "MinInstancesInService": 1,
+
+                        "MaxBatchSize": 1,
+
+                        "PauseTime": "PT15M",
+
+                        "SuspendProcesses": [
+
+                            "HealthCheck",
+
+                            "ReplaceUnhealthy",
+
+                            "AZRebalance",
+
+                            "AlarmNotification",
+
+                            "ScheduledActions"
+
+                        ],
+
+                        "WaitOnResourceSignals": false
+
+                    }
+
+                }
+
+            },
+
+            "ECSLaunchConfiguration": {
+
+                "Type": "AWS::AutoScaling::LaunchConfiguration",
+
+                "Properties": {
+
+                    "ImageId": {
+
+                        "Fn::FindInMap" : [ "AWSRegionToAMI", {"Ref" : "AWS::Region"}, "AMI" ]
+
+                    },
+
+                    "InstanceType": "t3.large",
+
+                    "SecurityGroups": [{
+
+                        "Ref": "ECSHostSecurityGroup"
+
+                    }
+
+                    ],
+					"KeyName": {"Ref": "Ec2KeyPairName"},
+                    "IamInstanceProfile": {
+
+                        "Ref": "ECSInstanceProfile"
+
+                    },
+
+                    "UserData":{
+
+                        "Fn::Base64":{
+
+                          "Fn::Join":[
+
+                            "",
+
+                            [
+
+                              "#!/bin/bash -xe\n",
+
+                              "echo ECS_CLUSTER=",
+
+                              {
+
+                                "Ref":"ECSCluster"
+
+                              },
+
+                              " >> /etc/ecs/ecs.config\n",
+
+                              "yum install -y aws-cfn-bootstrap\n",
+
+                              "/opt/aws/bin/cfn-signal -e $? ",
+
+                              "         --stack ",
+
+                              {
+
+                                "Ref":"AWS::StackName"
+
+                              },
+
+                              "         --resource ECSAutoScalingGroup ",
+
+                              "         --region ",
+
+                              {
+
+                                "Ref":"AWS::Region"
+
+                              },
+
+                              "\n"
+
+                            ]
+
+                          ]
+
+                        }
+
+                    }
+
+                },
+
+                "Metadata": {
+
+                        "AWS::CloudFormation::Init": {
+
+                            "config": {
+
+                                "commands": {
+
+                                    "01_add_instance_to_cluster": {
+
+                                        "command": {
+
+                                            "Fn::Sub": "echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config"
+
+                                    }
+
+                                    }
+
+                                },
+
+                                    "files": {
+
+                                        "/etc/cfn/cfn-hup.conf": {
+
+                                            "mode": "000700",
+
+                                            "owner": "root",
+
+                                            "group": "root",
+
+                                            "content": {
+
+                                                "Fn::Join":[
+
+                                                    "/n",
+
+                                                    [
+
+                                                        "[main]",
+
+                                                        "stack=", {"Ref": "AWS::StackName"},
+
+                                                        "region=", {"Ref": "AWS::Region"}
+
+
+
+
+
+                                                    ]
+
+                                                ]
+
+                                            }
+
+                                        }
+
+                                        },
+
+                                        "/etc/cfn/hooks.d/cfn-auto-reloader.conf" : {
+
+                                            "mode": "000700",
+
+                                            "owner": "root",
+
+                                            "group": "root",
+
+                                            "content": { "Fn::Join" : ["", [
+
+                                            "[cfn-auto-reloader-hook]\n",
+
+                                            "triggers=post.update\n",
+
+                                            "path=Resources.ECSLaunchConfiguration.Metadata.AWS::CloudFormation::Init\n",
+
+                                            "action=/opt/aws/bin/cfn-init -v ",
+
+                                            "         --stack ", { "Ref" : "AWS::StackName" },
+
+                                            "         --resource ECSLaunchConfiguration ",
+
+                                            "         --region ", { "Ref" : "AWS::Region" }, "\n",
+
+                                            "runas=root\n"
+
+                                            ]]}
+
+                                        
+
+                                    },
+
+                                    "services" : {
+
+                                        "sysvinit" : {  
+
+                                        "cfn-hup" : {
+
+                                            "enabled" : "true", 
+
+                                            "ensureRunning" : "true",
+
+                                            "files" : ["/etc/cfn/cfn-hup.conf", "/etc/cfn/hooks.d/cfn-auto-reloader.conf"]
+
+                                            }
+
+                                        }
+
+                                    }
+
+                                }
+
+                                }
+
+                                }
+
+                                
+
+                    
+
+                
+
+            },
+
+            "ECSRole": {
+
+                "Type": "AWS::IAM::Role",
+
+                "Properties": {
+
+                    "Path": "/",
+
+                    "RoleName": {
+
+                        "Fn::Join":[
+
+                            "-",
+
+                            [
+
+                                {"Ref": "PsaSubscriberCluster"},
+
+                                "ECSRole",
+
+                                {"Ref": "AWS::Region"}
+
+                            ]
+
+                        ]
+
+                    },
+
+                    "AssumeRolePolicyDocument": {
+
+                        "Statement": [{
+
+                            "Action": "sts:AssumeRole",
+
+                            "Effect": "Allow",
+
+                            "Principal": { 
+
+                                "Service": "ec2.amazonaws.com" 
+
+                            }
+
+                        }]
+
+                    },
+
+                    "Policies": [
+
+                        {
+
+                            "PolicyName": "psa-subscriber-ecs-instance",
+
+                            "PolicyDocument": {
+
+                                "Statement": [{
+
+                                    "Effect": "Allow",
+
+                                    "Action": [
+
+                                        "ecs:CreateCluster",
+
+                                        "ecs:DeregisterContainerInstance",
+
+                                        "ecs:DiscoverPollEndpoint",
+
+                                        "ecs:Poll",
+
+                                        "ecs:RegisterContainerInstance",
+
+                                        "ecs:StartTelemetrySession",
+
+                                        "ecs:Submit*",
+
+                                        "logs:CreateLogStream",
+
+                                        "logs:PutLogEvents",
+
+                                        "ecr:BatchCheckLayerAvailability",
+
+                                        "ecr:BatchGetImage",
+
+                                        "ecr:GetDownloadUrlForLayer",
+
+                                        "ecr:GetAuthorizationToken"
+
+                                    ],
+
+                                    "Resource": "*"
+
+                                }]
+
+                            }
+
+                        }
+
+                    ]
+
+                }
+
+            },
+
+            "ECSInstanceProfile": {
+
+                "Type": "AWS::IAM::InstanceProfile",
+
+                "Properties": {
+
+                    "Path": "/",
+
+                    "Roles": [
+
+                        {"Ref": "ECSRole"}
+
+                    ]
+
+                }
+
+            }
+
+         
+
+    },
+
+    "Outputs": {
+
+		"ClusterName": {
+
+			"Description": "A reference to the ECS cluster",
+
+			"Value": {
+
+                "Ref": "ECSCluster"
+
+            }
+
+        },
+
+        "ClusterArn": {
+
+			"Description": "A reference to the ECS cluster",
+
+			"Value": {
+
+                "Fn::GetAtt" : [ "ECSCluster", "Arn" ]
+
+            },
+			"Export" : { "Name" : "psa-subscriber-ECSCluster" }
+        },
+
+		"ECSAutoScalingGroupName": {
+
+			"Description": "Name of ECSAutoScalingGroup",
+
+			"Value": {
+
+                "Ref": "ECSAutoScalingGroup"
+
+            },
+			"Export" : { "Name" : "psa-subscriber-ECSAutoScalingGroup" }
+        },
+		
+        "VpcId": {
+
+			"Description": "VPC ID",
+
+			"Value": {"Fn::ImportValue"  : "StandaloneServices-Vpc"}
+
+        },
+
+        "subnet1": {
+
+			"Description": "Subnet",
+
+			"Value": {"Fn::ImportValue"  : "StandaloneServices-psa-subscriberPublicAz1Subnet"}
+
+        }
+	}   
+
+}
